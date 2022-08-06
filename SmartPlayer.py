@@ -9,6 +9,9 @@ from tkinter import ttk
 import tkinter as tk
 
 from pydub import AudioSegment
+from pydub.playback import _play_with_simpleaudio
+from pydub.playback import play
+from pydub import *
 import eyed3
 
 from mutagen.easyid3 import EasyID3
@@ -19,6 +22,11 @@ import numpy as np
 import time
 import cv2 as cv
 import imutils
+import random
+import os
+
+import mutagen
+from mutagen.wave import WAVE
 
 
 #-----------CLASES------------#
@@ -61,6 +69,11 @@ tipoDeLetra = 'arial'
 cursorCruz = 'tcross'
 cursorBotonMano = 'hand2'
 
+flagTipoReproduccion = 0
+trackActualIndex = -1
+emocion = 'happy'
+tracks = {}
+
 #----------FUNCIONES----------#
 
 #Abrir imagenes:
@@ -76,36 +89,56 @@ def leerMP3():
     print(audio['artist'][0])
     print(audio['album'][0])
     print(audio['composer'][0])
+    
+def reproducirAudio(comienzo_ms=0, audiofile=""):
+    
+    print('reproduciendo: ' + audiofile + '------------' + tracks[trackActualIndex][1])
+    def detenerAudio():
+        playing.stop()
+    
+    print("./MUSICA/"+audiofile)
+    sound = AudioSegment.from_file("./MUSICA/"+audiofile, "wav", start_second=10)
+    # sound = AudioSegment.from_file("./MUSICA/Pista1.wav", "wav", start_second=10)
+    print(sound.duration_seconds)
+    
+    splice = sound[comienzo_ms:]
+    playing = _play_with_simpleaudio(sound)
+    
 
+def elegirPistaSiguiente():
+    global trackActualIndex
+    tempListaEmocion = []
+    
+    if flagTipoReproduccion == 0: #de corrido
+        trackActualIndex += 1
+        
+    elif flagTipoReproduccion == 1: #aleatorio
+        trackActualIndex += random.randint(0, len(tracks) -1)
+        
+    elif flagTipoReproduccion == 2: #reconocimiento emociones
+        for key, value in tracks.items():
+         if emocion == value[3]:
+             tempListaEmocion.append(key)
+        trackActualIndex = random.shuffle(tempListaEmocion)[0]
+             
+    reproducirAudio(audiofile=tracks[trackActualIndex][0])
+        
 
 def mostrarTracks():
-    
-    listaMusica = ['track 1', 'track 2', 'track 3', 'track 4', 'track 5']
-    
+    global tracks
     def a(name):
         print (name)
+        
+    archivosDeDirectorio = os.listdir('./MUSICA/')
+    i = 0
+    for archivo in archivosDeDirectorio:
+        # audio = EasyID3("./MUSICA/" + archivo)        
+        
+        tracks.setdefault(i, [archivo, "s", "a", "happy"])
+        i += 1
     
-    tracks = {"0":['nombre0', 'autor0', 0],
-              "1":['nombre1', 'autor1', 0],
-              "2":['nombre2', 'autor2', 0],
-              "3":['nombre3', 'autor3', 0],
-              "4":['nombre4', 'autor4', 0],
-              "5":['nombre5', 'autor5', 0],
-              "6":['nombre6', 'autor6', 0],
-              "7":['nombre7', 'autor7', 0],
-              "8":['nombre8', 'autor8', 0],
-              "9":['nombre9', 'autor9', 0],
-              "10":['nombre10', 'autor10', 0],
-              "11":['nombre11', 'autor11', 0],
-              "12":['nombre12', 'autor12', 0],
-              "13":['nombre13', 'autor13', 0],
-              "14":['nombre14', 'autor14', 0],
-              "15":['nombre15', 'autor15', 0],
-              "16":['nombre16', 'autor16', 0],
-              "17":['nombre17', 'autor17', 0],
-              "18":['nombre18', 'autor18', 0],
-              "19":['nombre19', 'autor19', 0],
-              "20":['nombre20', 'autor20', 0]}
+    print(tracks)
+
     row = 1
     
     # for name in tracks:
@@ -139,7 +172,7 @@ def mostrarTracks():
 
     createScrollableContainer()
     for name in tracks:
-        user_button = ButtonTrack(fTable,text=tracks[name][0].capitalize() + '\nAutor: ' + tracks[name][1].capitalize(), anchor="w", width=50, activebackground = 'red',command=lambda name=name:a(name))
+        user_button = ButtonTrack(fTable,text=tracks[name][1].capitalize() + '\nAutor: ' + tracks[name][1].capitalize(), anchor="w", width=50, activebackground = 'red',command=lambda name=name:a(name))
         user_button.grid(row = row, column = 0)
         row+=1
         
@@ -344,5 +377,8 @@ lblFin.pack(side = LEFT, expand = False, fill = BOTH)
 
 btnDeteccionEmociones = Button(frame_Reproductor, text='Como me siento', command=abrirCamara)
 btnDeteccionEmociones.pack()
+
+btnSiguiente = Button(frame_Reproductor, text='siguiente', command=elegirPistaSiguiente)
+btnSiguiente.pack()
 
 ventanaMenu.mainloop()
