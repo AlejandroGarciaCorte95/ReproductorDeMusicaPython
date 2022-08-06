@@ -82,35 +82,42 @@ def abrirImagen(rutaImagen, ancho, alto):
     imagen = imagen.resize((ancho, alto), Image.ANTIALIAS)
     imagen = ImageTk.PhotoImage(imagen)
     return imagen
-
-def leerMP3():
-    audio = EasyID3("./MUSICA/")
-    print(audio['title'][0])
-    print(audio['artist'][0])
-    print(audio['album'][0])
-    print(audio['composer'][0])
     
 def reproducirAudio(comienzo_ms=0, audiofile=""):
-    
+    global playing
     print('reproduciendo: ' + audiofile + '------------' + tracks[trackActualIndex][1])
-    def detenerAudio():
+    try:
         playing.stop()
+        print('deteniendo audio')
+    except:
+        pass
     
     print("./MUSICA/"+audiofile)
-    sound = AudioSegment.from_file("./MUSICA/"+audiofile, "wav", start_second=10)
+    sound = AudioSegment.from_file("./MUSICA/"+audiofile, "wav", start_second=50)
     # sound = AudioSegment.from_file("./MUSICA/Pista1.wav", "wav", start_second=10)
     print(sound.duration_seconds)
     
     splice = sound[comienzo_ms:]
     playing = _play_with_simpleaudio(sound)
     
+def forzarIndex(num):
+    global trackActualIndex
+    trackActualIndex = num
+    print('el nuevo index es ' + str(trackActualIndex))
+    
+    reproducirAudio(audiofile=tracks[trackActualIndex][0])
 
 def elegirPistaSiguiente():
     global trackActualIndex
     tempListaEmocion = []
     
     if flagTipoReproduccion == 0: #de corrido
-        trackActualIndex += 1
+        if trackActualIndex >= len(tracks) -1:
+            trackActualIndex = 0
+        elif trackActualIndex < 0:
+            trackActualIndex = 0
+        else:
+            trackActualIndex += 1
         
     elif flagTipoReproduccion == 1: #aleatorio
         trackActualIndex += random.randint(0, len(tracks) -1)
@@ -132,10 +139,10 @@ def mostrarTracks():
     archivosDeDirectorio = os.listdir('./MUSICA/')
     i = 0
     for archivo in archivosDeDirectorio:
-        # audio = EasyID3("./MUSICA/" + archivo)        
-        
-        tracks.setdefault(i, [archivo, "s", "a", "happy"])
-        i += 1
+        # audio = EasyID3("./MUSICA/" + archivo)  
+        if '.wav' in archivo:
+            tracks.setdefault(i, [archivo, "Nombre pista: Pista " + str(i), "Interprete: Desconocido", "happy"])
+            i += 1
     
     print(tracks)
 
@@ -172,7 +179,7 @@ def mostrarTracks():
 
     createScrollableContainer()
     for name in tracks:
-        user_button = ButtonTrack(fTable,text=tracks[name][1].capitalize() + '\nAutor: ' + tracks[name][1].capitalize(), anchor="w", width=50, activebackground = 'red',command=lambda name=name:a(name))
+        user_button = ButtonTrack(fTable,text=tracks[name][1].capitalize() + '\nAutor: ' + tracks[name][1].capitalize(), anchor="w", width=50, activebackground = 'red',command=lambda name=name:[forzarIndex(name)])
         user_button.grid(row = row, column = 0)
         row+=1
         
@@ -292,7 +299,7 @@ def identificarEmocion():
 
 ventanaMenu = Tk()
 ventanaMenu.title('Smart Music')
-#ventanaMenu.minsize(height=500, width=700)
+ventanaMenu.minsize(height=400, width=900)
 #ventanaMenu.config(bg = 'white')
 #ventanaMenu.wm_attributes('-alpha', 0.97)
 #ventanaMenu.attributes('-fullscreen', True)
