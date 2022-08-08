@@ -27,6 +27,7 @@ import os
 
 import mutagen
 from mutagen.wave import WAVE
+import pathlib
 
 
 #-----------CLASES------------#
@@ -97,8 +98,12 @@ def reproducirAudio(comienzo_ms=0, audiofile=""):
     # sound = AudioSegment.from_file("./MUSICA/Pista1.wav", "wav", start_second=10)
     print(sound.duration_seconds)
     
+    btnPlayPausa.config(text='⏸')
+    
     splice = sound[comienzo_ms:]
     playing = _play_with_simpleaudio(sound)
+    
+    comienzoTiempo = time.time()
     
 def forzarIndex(num):
     global trackActualIndex
@@ -129,7 +134,32 @@ def elegirPistaSiguiente():
         trackActualIndex = random.shuffle(tempListaEmocion)[0]
              
     reproducirAudio(audiofile=tracks[trackActualIndex][0])
+    
+def elegirPistaAnterior():
+    global trackActualIndex
+    tempListaEmocion = []
+    
+    if flagTipoReproduccion == 0: #de corrido
+        if trackActualIndex >= len(tracks) -1:
+            trackActualIndex = 0
+        elif trackActualIndex <= 0:
+            trackActualIndex = 0
+        else:
+            trackActualIndex -= 1
         
+    elif flagTipoReproduccion == 1: #aleatorio
+        trackActualIndex += random.randint(0, len(tracks) -1)
+        
+    elif flagTipoReproduccion == 2: #reconocimiento emociones
+        for key, value in tracks.items():
+         if emocion == value[3]:
+             tempListaEmocion.append(key)
+        trackActualIndex = random.shuffle(tempListaEmocion)[0]
+             
+    reproducirAudio(audiofile=tracks[trackActualIndex][0])
+       
+def playPausa():
+    return 0
 
 def mostrarTracks():
     global tracks
@@ -368,7 +398,7 @@ lblInicio.pack(side = LEFT, expand = False, fill = BOTH)
 def show_values():
     print(str(sliderBarraProgreso.get()))
 
-btnPlayPausa = Button(frame_Controles, text=' ▶ ',font = (tipoDeLetra, 20), activebackground='blue')
+btnPlayPausa = Button(frame_Controles, text='⏯',font = (tipoDeLetra, 20), activebackground='blue', command=playPausa)
 btnPlayPausa.pack()
 
 sliderBarraProgreso = Scale(frame_Barra, from_=0, to=1000, orient=HORIZONTAL, bg='red', relief='flat', bd=0, showvalue=0, sliderlength=10, width=10, activebackground='blue', command=lambda _:show_values())
@@ -385,7 +415,14 @@ lblFin.pack(side = LEFT, expand = False, fill = BOTH)
 btnDeteccionEmociones = Button(frame_Reproductor, text='Como me siento', command=abrirCamara)
 btnDeteccionEmociones.pack()
 
+btnAnterior = Button(frame_Reproductor, text='anterior', command=elegirPistaAnterior)
+btnAnterior.pack()
 btnSiguiente = Button(frame_Reproductor, text='siguiente', command=elegirPistaSiguiente)
 btnSiguiente.pack()
+
+
+txtDirectorio = Entry(frame_Directorio, border=0, bg='#151515', foreground='white')
+txtDirectorio.pack(fill='both', expand=1)
+txtDirectorio.insert(0, os.path.abspath('./MUSICA'))
 
 ventanaMenu.mainloop()
