@@ -3,34 +3,37 @@
 Reproductor de musica SmartPlayer
 
 """
-
+# Interfaz grafica
 from tkinter import *
 from tkinter import ttk
 import tkinter as tk
+import cv2 as cv
+import imutils
 
+# Reproducción de audio
 from pydub import AudioSegment
 from pydub.playback import _play_with_simpleaudio
 from pydub.playback import play
-from pydub import *
-import eyed3
 
-from mutagen.easyid3 import EasyID3
-
+# Red neuronal
 from tflite_runtime.interpreter import Interpreter 
 from PIL import Image, ImageTk
 import numpy as np
+
+# Control del Tiempo
+import threading
 import time
-import cv2 as cv
-import imutils
+
+# Varias
 import random
 import os
 
-import mutagen
-from mutagen.wave import WAVE
-import pathlib
+# import mutagen
+# from mutagen.wave import WAVE
+# from importlib.metadata import version
+# from mutagen.easyid3 import EasyID3
 
-
-#-----------CLASES------------#
+#---------------------------------- CLASES -----------------------------------#
 
 class Button(tk.Button):
     def __init__(self, master, **kw):
@@ -62,20 +65,33 @@ class ButtonTrack(tk.Button):
     def onLeave(self, e):
         self['background'] = self.defaultBackground
         self['height'] = self.defaultHeight
-        
 
-#----------VARIABLES----------#
+#---------------------------------- ESTILOS ----------------------------------#
+
+def scrollbarTema():
+            
+    styleScrollbar = ttk.Style()
+    styleScrollbar.theme_use('alt')
+    styleScrollbar.configure("TScrollbar", gripcount=0, activebackground='Black', background='#1A1A1A', troughcolor='#1C1C1C', lightcolor='Black', bordercolor='Black', arrowcolor='White', arrowsize=16, relief='raiced')
+
+
+#----------------------------- VARIABLES GLOBALES ----------------------------#
 
 tipoDeLetra = 'arial'
 cursorCruz = 'tcross'
 cursorBotonMano = 'hand2'
+reproduciendo = False
 
 flagTipoReproduccion = 0
 trackActualIndex = -1
-emocion = 'happy'
+emocion = 'angry'
 tracks = {}
+tiempoFaltanteActualAudio = 0
+duracionActualAudio = 0
+tiempoUltimaPausa = 0
+playing = None
 
-#----------FUNCIONES----------#
+#--------------------------------- FUNCIONES ---------------------------------#
 
 #Abrir imagenes:
 def abrirImagen(rutaImagen, ancho, alto):
@@ -84,37 +100,66 @@ def abrirImagen(rutaImagen, ancho, alto):
     imagen = ImageTk.PhotoImage(imagen)
     return imagen
     
-def reproducirAudio(comienzo_ms=0, audiofile=""):
+def actualizarFlagTipoReproduccion():
+    global flagTipoReproduccion
+    
+    if cmbTipoReproduccion.get() == 'Lineal':
+        flagTipoReproduccion = 0;
+    if cmbTipoReproduccion.get() == 'Aleatorio':
+        flagTipoReproduccion = 1;
+    if cmbTipoReproduccion.get() == 'Emociones':
+        flagTipoReproduccion = 2;
+        
+    print('flag tipo rep: ' + str(flagTipoReproduccion))
+        
+
+def reproducirAudio(comienzo_s, audiofile=""):
     global playing
+    global tiempoFaltanteActualAudio
+    global duracionActualAudio
+    global sound
     print('reproduciendo: ' + audiofile + '------------' + tracks[trackActualIndex][1])
     try:
+        #if playing.is_playing():
         playing.stop()
         print('deteniendo audio')
     except:
         pass
     
-    print("./MUSICA/"+audiofile)
-    sound = AudioSegment.from_file("./MUSICA/"+audiofile, "wav", start_second=50)
-    # sound = AudioSegment.from_file("./MUSICA/Pista1.wav", "wav", start_second=10)
-    print(sound.duration_seconds)
-    
-    btnPlayPausa.config(text='⏸')
-    
-    splice = sound[comienzo_ms:]
-    playing = _play_with_simpleaudio(sound)
-    
-    comienzoTiempo = time.time()
+    try:
+        print("./MUSICA/"+audiofile)
+        sound = AudioSegment.from_file("./MUSICA/"+audiofile, "wav", start_second=comienzo_s)
+        # sound = AudioSegment.from_file("./MUSICA/Pista1.wav", "wav", start_second=10)
+        
+        print('el audio dura:' + str(sound.duration_seconds))
+        tiempoFaltanteActualAudio = sound.duration_seconds
+        
+        if comienzo_s == 0:
+            duracionActualAudio = sound.duration_seconds
+            sliderBarraProgreso.set(0)
+            
+            lblPista.config(text=tracks[trackActualIndex][1] + '\n' + tracks[trackActualIndex][2])
+            lblEmocion.config(text='Emocion: ' + tracks[trackActualIndex][3])
+        
+        btnPlayPausa.config(text='⏸')
+        playing = _play_with_simpleaudio(sound)
+
+        
+        #comienzoTiempo = time.time()
+    except:
+        pass
     
 def forzarIndex(num):
     global trackActualIndex
     trackActualIndex = num
     print('el nuevo index es ' + str(trackActualIndex))
     
-    reproducirAudio(audiofile=tracks[trackActualIndex][0])
+    reproducirAudio(0, audiofile=tracks[trackActualIndex][0])
 
 def elegirPistaSiguiente():
     global trackActualIndex
     tempListaEmocion = []
+    actualizarFlagTipoReproduccion()
     
     if flagTipoReproduccion == 0: #de corrido
         if trackActualIndex >= len(tracks) -1:
@@ -125,19 +170,23 @@ def elegirPistaSiguiente():
             trackActualIndex += 1
         
     elif flagTipoReproduccion == 1: #aleatorio
-        trackActualIndex += random.randint(0, len(tracks) -1)
+        trackActualIndex = random.randint(0, len(tracks) -1)
         
     elif flagTipoReproduccion == 2: #reconocimiento emociones
         for key, value in tracks.items():
-         if emocion == value[3]:
-             tempListaEmocion.append(key)
-        trackActualIndex = random.shuffle(tempListaEmocion)[0]
+         if emocion == value[3]: # el 3 es el index dentro de la lista del diccionario
+             tempListaEmocion.insert(len(tempListaEmocion), key)
+             print(tempListaEmocion)
+        trackActualIndex = tempListaEmocion[random.randint(0, (len(tempListaEmocion) -1))]
+        
+        print('EL RANDOM ES: ' + str(trackActualIndex))
              
-    reproducirAudio(audiofile=tracks[trackActualIndex][0])
+    reproducirAudio(0, audiofile=tracks[trackActualIndex][0])
     
 def elegirPistaAnterior():
     global trackActualIndex
     tempListaEmocion = []
+    actualizarFlagTipoReproduccion()
     
     if flagTipoReproduccion == 0: #de corrido
         if trackActualIndex >= len(tracks) -1:
@@ -148,7 +197,7 @@ def elegirPistaAnterior():
             trackActualIndex -= 1
         
     elif flagTipoReproduccion == 1: #aleatorio
-        trackActualIndex += random.randint(0, len(tracks) -1)
+        trackActualIndex = random.randint(0, len(tracks) -1)
         
     elif flagTipoReproduccion == 2: #reconocimiento emociones
         for key, value in tracks.items():
@@ -156,10 +205,25 @@ def elegirPistaAnterior():
              tempListaEmocion.append(key)
         trackActualIndex = random.shuffle(tempListaEmocion)[0]
              
-    reproducirAudio(audiofile=tracks[trackActualIndex][0])
+    reproducirAudio(0, audiofile=tracks[trackActualIndex][0])
        
 def playPausa():
-    return 0
+    global reproduciendo
+    global tiempoUltimaPausa
+    
+    actualizarFlagTipoReproduccion()
+    
+    if playing.is_playing() == True:
+        btnPlayPausa.config(text = '⏸')
+        reproduciendo = False
+        
+        tiempoUltimaPausa = sound.duration_seconds
+        playing.stop()
+    elif reproduciendo == False:
+        btnPlayPausa.config(text = '⏯')
+        reproduciendo = True
+        reproducirAudio(duracionActualAudio - tiempoUltimaPausa, tracks[trackActualIndex][0])
+
 
 def mostrarTracks():
     global tracks
@@ -169,25 +233,27 @@ def mostrarTracks():
     archivosDeDirectorio = os.listdir('./MUSICA/')
     i = 0
     for archivo in archivosDeDirectorio:
-        # audio = EasyID3("./MUSICA/" + archivo)  
         if '.wav' in archivo:
-            tracks.setdefault(i, [archivo, "Nombre pista: Pista " + str(i), "Interprete: Desconocido", "happy"])
+            if archivo.count('happy') > 0:
+                emocion = 'happy'
+            if archivo.count('angry') > 0:
+                emocion = 'angry'
+            if archivo.count('neutral') > 0:
+                emocion = 'neutral'
+            if archivo.count('sad') > 0:
+                emocion = 'sad'
+            tracks.setdefault(i, [archivo, "Nombre pista: Pista " + str(i), "Desconocido", emocion])
             i += 1
     
     print(tracks)
 
     row = 1
     
-    # for name in tracks:
-    #     user_button = Button(frame_Playlist,text=tracks[name][0].capitalize() + '\nAutor: ' + tracks[name][1].capitalize(), anchor="w", width=50,command=lambda name=name:a(name))
-    #     user_button.grid(row = row, column = 0)
-    #     row+=1
-    
-    cTableContainer = tk.Canvas(frame_Playlist,bg='purple')
+    cTableContainer = tk.Canvas(frame_Playlist,bg='#1E1E1E', width=300)
     fTable = tk.Frame(cTableContainer)
     fTable.config(bg='cyan')
-    # sbHorizontalScrollBar = tk.Scrollbar(frame_Playlist)
-    sbVerticalScrollBar = tk.Scrollbar(frame_Playlist)
+    scrollbarTema()
+    sbVerticalScrollBar = ttk.Scrollbar(frame_Playlist)
 
     # Updates the scrollable region of the Canvas to encompass all the widgets in the Frame
     def updateScrollRegion():
@@ -197,10 +263,8 @@ def mostrarTracks():
     # Sets up the Canvas, Frame, and scrollbars for scrolling
     def createScrollableContainer():
     	cTableContainer.config(yscrollcommand=sbVerticalScrollBar.set, highlightthickness=0)
-    	# sbHorizontalScrollBar.config(orient=tk.HORIZONTAL, command=cTableContainer.xview)
     	sbVerticalScrollBar.config(orient=tk.VERTICAL, command=cTableContainer.yview)
 
-    	# sbHorizontalScrollBar.pack(fill=tk.X, side=tk.BOTTOM, expand=tk.FALSE)
     	sbVerticalScrollBar.pack(fill=tk.Y, side=tk.RIGHT, expand=tk.FALSE)
     	cTableContainer.pack(fill=tk.BOTH, side=tk.LEFT, expand=tk.TRUE)
     	cTableContainer.create_window(0, 0, window=fTable, anchor=tk.NW)
@@ -209,7 +273,7 @@ def mostrarTracks():
 
     createScrollableContainer()
     for name in tracks:
-        user_button = ButtonTrack(fTable,text=tracks[name][1].capitalize() + '\nAutor: ' + tracks[name][1].capitalize(), anchor="w", width=50, activebackground = 'red',command=lambda name=name:[forzarIndex(name)])
+        user_button = ButtonTrack(fTable,text=tracks[name][1].capitalize() + '\nAutor: ' + tracks[name][2].capitalize(), anchor="w", width=50, bg='#1C1C1C', foreground='#FFFFFF',activeforeground='#FFFFFF', activebackground='#15436F',command=lambda name=name:[forzarIndex(name)])
         user_button.grid(row = row, column = 0)
         row+=1
         
@@ -218,7 +282,7 @@ def mostrarTracks():
 def abrirCamara():
     def iniciar():
         global cap
-        cap = cv.VideoCapture(1, cv.CAP_DSHOW)
+        cap = cv.VideoCapture(0, cv.CAP_DSHOW)
         visualizar()
         
     def visualizar():
@@ -247,17 +311,18 @@ def abrirCamara():
     def capturarImagen():
         cv.imwrite("./TEMP/test.png", cv.cvtColor(frame, cv.COLOR_BGR2GRAY))
         
-        time.sleep(400/1000)
+        time.sleep(200/1000)
         finalizar()
         
     cap = None
     ventanaCamara = Toplevel(ventanaMenu)
     ventanaCamara.title('Camara')
+    ventanaCamara.configure(background='#1A1A1A')
     ventanaCamara.resizable(width = False, height = False)
     ventanaCamara.focus_set()
     ventanaCamara.grab_set()
     ventanaCamara.transient(master=ventanaMenu)
-    btnFoto = Button(ventanaCamara, text="Capturar emocion", width=70, activebackground='sky blue', command=capturarImagen)
+    btnFoto = Button(ventanaCamara, text="Capturar emocion", width=70, activebackground='black', background='#0F0F0F', foreground='White', command=capturarImagen)
     btnFoto.grid(column=0, row=1, padx=5, pady=5)
     lblVideo = Label(ventanaCamara)
     lblVideo.grid(column=0, row=0, columnspan=2)
@@ -320,6 +385,9 @@ def identificarEmocion():
     classification_label = labels[label_id]
     print("Image Label is :", classification_label, ", with Accuracy :", np.round(prob*100, 2), "%.")
 
+    global emocion
+    emocion = classification_label
+    elegirPistaSiguiente()
     img = cv.imread(testImg)
     texto = ('{}, {} {}').format(classification_label, np.round(prob*100, 2), '%')
     cv.putText(img, texto, (100, 100), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv.LINE_AA)
@@ -329,25 +397,22 @@ def identificarEmocion():
 
 ventanaMenu = Tk()
 ventanaMenu.title('Smart Music')
-ventanaMenu.minsize(height=400, width=900)
-#ventanaMenu.config(bg = 'white')
-#ventanaMenu.wm_attributes('-alpha', 0.97)
-#ventanaMenu.attributes('-fullscreen', True)
+ventanaMenu.minsize(height=600, width=1200)
 ventanaMenu.after(1, lambda: ventanaMenu.focus_force())
 # bit99 = ventanaMenu.iconbitmap('SmartMusicIcono.ico')
 #ventanaMenu.iconphoto(True, tk.PhotoImage(file='SmartMusicIcono.png'))
 
-frame_Izquierdo = Frame(ventanaMenu, width=200, height=200, relief='groove') 
+frame_Izquierdo = Frame(ventanaMenu, width=170, height=100, relief='groove') 
 frame_Izquierdo.pack(fill='y', side='left')
 frame_Izquierdo.config(bg = 'black')
 
-frame_Playlist = Frame(frame_Izquierdo, width=200, height=200, relief='groove') 
+frame_Playlist = Frame(frame_Izquierdo, width=170, height=200, relief='groove') 
 frame_Playlist.pack(fill='y', side='left')
 frame_Playlist.config(bg = 'orange')
 
 frame_Reproductor = Frame(ventanaMenu, relief='groove') 
 frame_Reproductor.pack(fill='both', side='right', expand=1)
-frame_Reproductor.config(bg = 'red')
+frame_Reproductor.config(bg = '#1A1A1A')
 
 frame_Controles = Frame(frame_Reproductor, height=100, relief='groove') 
 frame_Controles.pack(fill='x',  side='bottom', expand=0)
@@ -367,11 +432,11 @@ frame_Directorio.config(bg = 'yellow')
 
 frame_Pista = Frame(frame_Reproductor, height=10, relief='groove') 
 frame_Pista.pack(fill='both',  side='top', expand=1)
-frame_Pista.config(bg = 'green')
+frame_Pista.config(bg = '#0F0F0F')
 
-frame_Disco = Frame(frame_Pista, width=300, height=300, relief='groove') 
-frame_Disco.pack(anchor='nw', expand=0)
-frame_Disco.config(bg = 'sky blue')
+frame_Disco = Frame(frame_Pista, width=300, height=300, relief='groove', padx=20, pady=20) 
+frame_Disco.pack(side = LEFT)
+frame_Disco.config(bg = '#0F0F0F')
 
 mostrarTracks()
 
@@ -386,22 +451,28 @@ def update(ind):
         ind = 0
     label.configure(image=frame)
     frame_Disco.after(20, update, ind)
-label = Label(frame_Disco, bg='sky blue')
+label = Label(frame_Disco, bg='#0F0F0F')
 label.pack()
 frame_Disco.after(0, update, 0)
 
-lblInicio = Label(frame_BarraTiempo, text='00:00', bg='green')
+lblInicio = Label(frame_BarraTiempo, text='00:00', bg='#1A1A1A', foreground='#FFFFFF')
 # lblInicio.pack()
 # lblInicio.grid(row=1,column=0)
 lblInicio.pack(side = LEFT, expand = False, fill = BOTH)
 
-def show_values():
+def iniciarAudioDesde():
     print(str(sliderBarraProgreso.get()))
+    porcentaje = sliderBarraProgreso.get()
+    nuevoComienzoAudio = (porcentaje * duracionActualAudio) / 1010
+    print('nuevo comienzo:' + str(nuevoComienzoAudio))
+    reproducirAudio(nuevoComienzoAudio, tracks[trackActualIndex][0])
+    sliderBarraProgreso.set(porcentaje)
+    
 
-btnPlayPausa = Button(frame_Controles, text='⏯',font = (tipoDeLetra, 20), activebackground='blue', command=playPausa)
+btnPlayPausa = Button(frame_Controles, text='⏯',font = (tipoDeLetra, 20), bg='#15436F', foreground='#FFFFFF',activeforeground='black', activebackground='#5E9BD5', command=playPausa)
 btnPlayPausa.pack()
 
-sliderBarraProgreso = Scale(frame_Barra, from_=0, to=1000, orient=HORIZONTAL, bg='red', relief='flat', bd=0, showvalue=0, sliderlength=10, width=10, activebackground='blue', command=lambda _:show_values())
+sliderBarraProgreso = Scale(frame_Barra, from_=0, to=1000, orient=HORIZONTAL, bg='#1A1A1A', relief='flat', bd=0, showvalue=0, sliderlength=10, width=10, activebackground='#0A0A0A', command=lambda _:iniciarAudioDesde())
 sliderBarraProgreso.set(23)
 sliderBarraProgreso.pack(fill='both',anchor='e', expand=1)
 
@@ -409,20 +480,32 @@ sliderBarraProgreso.pack(fill='both',anchor='e', expand=1)
 # frame_Barra.grid(row=1,column=1,sticky='we')
 frame_Barra.pack(side = LEFT, expand = True, fill = BOTH)
 
-lblFin = Label(frame_BarraTiempo, text='99:59', bg='green')
+lblFin = Label(frame_BarraTiempo, text='99:59', bg='#1A1A1A', foreground='#FFFFFF')
 lblFin.pack(side = LEFT, expand = False, fill = BOTH)
 
-btnDeteccionEmociones = Button(frame_Reproductor, text='Como me siento', command=abrirCamara)
-btnDeteccionEmociones.pack()
+btnDeteccionEmociones = Button(frame_Reproductor, text='♾️', command=abrirCamara, bg='#1C1C1C', foreground='#FFFFFF',activeforeground='#FFFFFF', activebackground='#0A0A0A')
+btnDeteccionEmociones.pack(side = RIGHT, expand=0)
 
-btnAnterior = Button(frame_Reproductor, text='anterior', command=elegirPistaAnterior)
-btnAnterior.pack()
-btnSiguiente = Button(frame_Reproductor, text='siguiente', command=elegirPistaSiguiente)
-btnSiguiente.pack()
+btnAnterior = Button(frame_Reproductor, text='◀', command=elegirPistaAnterior, bg='#1C1C1C', foreground='#FFFFFF',activeforeground='#FFFFFF', activebackground='#0A0A0A')
+btnAnterior.pack(side = LEFT, expand=0)
+btnSiguiente = Button(frame_Reproductor, text='▶', command=elegirPistaSiguiente, bg='#1C1C1C', foreground='#FFFFFF',activeforeground='#FFFFFF', activebackground='#0A0A0A')
+btnSiguiente.pack(side = LEFT, expand=0)
 
+cmbTipoReproduccion = ttk.Combobox(frame_Reproductor, state="readonly", values=["Lineal", "Aleatorio", "Emociones"], background= '#0A0A0A', style=ttk.Style().theme_use('alt'))
+cmbTipoReproduccion.current(0)
+cmbTipoReproduccion.pack(side = RIGHT, expand=0)
 
 txtDirectorio = Entry(frame_Directorio, border=0, bg='#151515', foreground='white')
 txtDirectorio.pack(fill='both', expand=1)
 txtDirectorio.insert(0, os.path.abspath('./MUSICA'))
+
+lblPista = Label(frame_Pista, border=0, bg='#0F0F0F', foreground='white', font =('calibri', 30, 'bold'), padx=10)
+lblPista.pack(side = LEFT, expand=1)
+lblPista.config(text='Seleccione una pista\npara comenzar')
+
+lblEmocion = Label(frame_Pista, border=0, bg='#0F0F0F', foreground='white', font =('calibri', 10, 'bold'), padx=50)
+lblEmocion.pack(side = BOTTOM, expand=0)
+lblEmocion.config(text='')
+
 
 ventanaMenu.mainloop()
